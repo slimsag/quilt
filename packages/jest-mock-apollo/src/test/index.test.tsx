@@ -24,22 +24,72 @@ const createGraphQLClient = configureClient({
 interface Props {
   data?: {
     loading: boolean;
+    pets: any[];
   };
 }
 
 // mock Component
-function SomePageBase({data: {loading}}: Props) {
-  return <p>{loading ? 'Loading' : 'Loaded!'}</p>;
-}
+function SomePageBase(props: Props) {
+  const {
+    data: {loading, pets, error},
+  } = props;
+  const errorMessage = error ? <p>{error.message}</p> : null;
 
+  return (
+    <>
+      <p>{loading ? 'Loading' : 'Loaded!'}</p>
+      <p>{pets && pets.length ? pets[0].name : 'No pets'}</p>
+      {errorMessage}
+    </>
+  );
+}
 const SomePage = graphql(petQuery)(SomePageBase);
 
+const client = createGraphQLClient({
+  Pet: {
+    pets: [
+      {
+        __typename: 'Cat',
+        name: 'Garfield',
+      },
+    ],
+  },
+});
+
 describe('jest-mock-apollo', () => {
-  it('provides the required context', () => {
-    mount(<SomePage />, {
+  it('throws error when no mock provided', async () => {
+    const client = createGraphQLClient();
+    const somePage = mount(<SomePage />, {
       context: {
-        client: createGraphQLClient(),
+        client,
       },
     });
+
+    await Promise.all(client.graphQLRequests);
+    somePage.update();
+
+    expect(
+      somePage.containsMatchingElement(
+        <p>
+          GraphQL error: Can’t perform GraphQL operation {"'Pet'"} because no
+          mocks were set.
+        </p>,
+      ),
+    ).toBe(true);
+  });
+
+  it('resolves mock query and renders data', async () => {
+    const somePage = mount(<SomePage />, {
+      context: {
+        client,
+      },
+    });
+
+    await Promise.all(client.graphQLRequests);
+    somePage.update();
+    const query = client.graphQLRequests.lastOperation('Pet');
+    expect(query).toMatchObject({operationName: 'Pet'});
+
+    expect(somePage.containsMatchingElement(<p>Garfield</p>)).toBe(true);
   });
 });
